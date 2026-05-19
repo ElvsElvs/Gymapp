@@ -47,6 +47,59 @@ export function getDatabase(): SQLite.SQLiteDatabase {
   return db;
 }
 
+export interface SessionWithStats {
+  id: number;
+  name: string;
+  date: string;
+  exercise_count: number;
+  set_count: number;
+}
+
+export interface ExerciseWithSets {
+  id: number;
+  name: string;
+  sets: { set_number: number; reps: number; weight_kg: number }[];
+}
+
+export async function getWorkoutHistory(): Promise<SessionWithStats[]> {
+  const database = getDatabase();
+  return database.getAllAsync<SessionWithStats>(`
+    SELECT
+      ws.id,
+      ws.name,
+      ws.date,
+      COUNT(DISTINCT e.id) AS exercise_count,
+      COUNT(s.id)          AS set_count
+    FROM workout_sessions ws
+    LEFT JOIN exercises e ON e.session_id = ws.id
+    LEFT JOIN sets s      ON s.exercise_id = e.id
+    GROUP BY ws.id
+    ORDER BY ws.date DESC, ws.created_at DESC
+  `);
+}
+
+export async function getSessionExercises(sessionId: number): Promise<ExerciseWithSets[]> {
+  const database = getDatabase();
+  const exercises = await database.getAllAsync<{ id: number; name: string }>(
+    'SELECT id, name FROM exercises WHERE session_id = ? ORDER BY order_index',
+    [sessionId]
+  );
+  return Promise.all(
+    exercises.map(async e => {
+      const sets = await database.getAllAsync<{ set_number: number; reps: number; weight_kg: number }>(
+        'SELECT set_number, reps, weight_kg FROM sets WHERE exercise_id = ? ORDER BY set_number',
+        [e.id]
+      );
+      return { ...e, sets };
+    })
+  );
+}
+
+export async function deleteSession(sessionId: number): Promise<void> {
+  const database = getDatabase();
+  await database.runAsync('DELETE FROM workout_sessions WHERE id = ?', [sessionId]);
+}
+
 export async function saveWorkout(
   name: string,
   exercises: { name: string; sets: { reps: number; weight: number }[] }[]
