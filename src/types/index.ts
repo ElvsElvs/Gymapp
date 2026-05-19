@@ -27,3 +27,14 @@ export interface BodyWeightEntry {
   weight_kg: number;
   notes?: string;
 }
+
+export interface ProgramGroup {
+  name: string;
+  exercises: string[];
+}
+
+export interface Program {
+  id: string;
+  name: string;
+  groups: ProgramGroup[];
+}

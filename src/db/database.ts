@@ -39,7 +39,51 @@ export async function initDatabase(): Promise<void> {
       weight_kg REAL NOT NULL,
       notes TEXT
     );
+
+    CREATE TABLE IF NOT EXISTS meta (
+      key   TEXT PRIMARY KEY,
+      value TEXT NOT NULL
+    );
   `);
+
+  await seedDemoData(db);
+}
+
+async function seedDemoData(database: SQLite.SQLiteDatabase): Promise<void> {
+  const flag = await database.getFirstAsync<{ value: string }>(
+    "SELECT value FROM meta WHERE key = 'demo_seeded'"
+  );
+  if (flag) return;
+
+  const sessions = [
+    { date: '2026-02-14', weight: 70,  reps: [10, 10, 10, 10] },
+    { date: '2026-02-25', weight: 80,  reps: [10, 10, 7] },
+    { date: '2026-03-04', weight: 90,  reps: [7, 7, 5, 7] },
+    { date: '2026-03-16', weight: 100, reps: [7, 9, 5, 4] },
+    { date: '2026-03-30', weight: 105, reps: [4, 4, 4, 5] },
+  ];
+
+  await database.withTransactionAsync(async () => {
+    for (const s of sessions) {
+      const { lastInsertRowId: sessionId } = await database.runAsync(
+        'INSERT INTO workout_sessions (name, date) VALUES (?, ?)',
+        ['Chest + Triceps', s.date]
+      );
+      const { lastInsertRowId: exerciseId } = await database.runAsync(
+        'INSERT INTO exercises (session_id, name, order_index) VALUES (?, ?, 0)',
+        [sessionId, 'Barbell Bench Press']
+      );
+      for (let i = 0; i < s.reps.length; i++) {
+        await database.runAsync(
+          'INSERT INTO sets (exercise_id, reps, weight_kg, set_number) VALUES (?, ?, ?, ?)',
+          [exerciseId, s.reps[i], s.weight, i + 1]
+        );
+      }
+    }
+    await database.runAsync(
+      "INSERT INTO meta (key, value) VALUES ('demo_seeded', '1')"
+    );
+  });
 }
 
 export function getDatabase(): SQLite.SQLiteDatabase {
